@@ -1,5 +1,5 @@
-const CACHE = 'jccfacturas-v1';
-const ASSETS = ['./','./index.html','./manifest.json'];
+const CACHE = 'jccfacturas-v2';
+const ASSETS = ['./','./index.html','./manifest.json','./msal-browser.min.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
