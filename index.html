@@ -248,8 +248,8 @@ const msalConfig = {
   },
   cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
 };
-const msalInstance = new msal.PublicClientApplication(msalConfig);
-// Scopes mínimos para el login — SharePoint se pide después al subir
+// Declarar como let — se instancia dentro de init() cuando MSAL ya cargó
+let msalInstance = null;
 const loginRequest = {
   scopes: ['Files.ReadWrite.All', 'User.Read']
 };
@@ -266,6 +266,7 @@ const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto'
 // ══════════════════════════════════════════
 async function init() {
   try {
+    msalInstance = new msal.PublicClientApplication(msalConfig);
     await msalInstance.initialize();
     const resp = await msalInstance.handleRedirectPromise().catch(e => {
       console.warn('handleRedirectPromise error:', e);
@@ -294,6 +295,10 @@ async function init() {
 }
 
 async function login() {
+  if (!msalInstance) {
+    mostrarError('La app aún está cargando, esperá un momento y volvé a intentar.');
+    return;
+  }
   const btn = document.getElementById('btn-login');
   btn.disabled = true;
   btn.textContent = 'Conectando...';
