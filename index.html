@@ -439,23 +439,26 @@ async function subirArchivo() {
   const ruta   = rutaOneDrive();
   const nombre = nombreArchivo(state.archivo);
 
-  // Intentar subir directo al drive propio (funciona para cuenta dueña)
-  const path = ruta.split('/').concat([nombre]).map(encodeURIComponent).join('/');
-  const url  = `https://graph.microsoft.com/v1.0/me/drive/root:/${path}:/content`;
-  let resp = await fetch(url, {
-    method: 'PUT',
-    headers: { 'Authorization': 'Bearer ' + state.token, 'Content-Type': state.archivo.type || 'application/octet-stream' },
-    body: state.archivo
-  });
+  // Detectar si es cuenta propietaria (Amelia) o usuario externo (itucam)
+  const esAmelia = currentAccount.username.toLowerCase().includes('campanaprocesos') ||
+                   currentAccount.username.toLowerCase().includes('ameliacampana');
 
-  // Si falla (usuario externo sin esa carpeta en su drive), buscar en compartidos
-  if (!resp.ok) {
-    console.log('Drive propio falló, buscando carpeta compartida...');
-    const itemId = await obtenerCarpetaCompartida();
-    // Ruta dentro de la carpeta compartida (sin el nombre raíz JCCFACTURAS)
+  let resp;
+  if (esAmelia) {
+    // Cuenta dueña → subir directo a su drive
+    const path = ruta.split('/').concat([nombre]).map(encodeURIComponent).join('/');
+    const url  = `https://graph.microsoft.com/v1.0/me/drive/root:/${path}:/content`;
+    resp = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Authorization': 'Bearer ' + state.token, 'Content-Type': state.archivo.type || 'application/octet-stream' },
+      body: state.archivo
+    });
+  } else {
+    // Usuario externo → usar carpeta compartida
+    const { driveId, itemId } = await obtenerCarpetaCompartida();
     const subRuta = ruta.split('/').slice(1).concat([nombre]).map(encodeURIComponent).join('/');
-    const url2 = `https://graph.microsoft.com/v1.0/me/drive/items/${itemId}:/${subRuta}:/content`;
-    resp = await fetch(url2, {
+    const url = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}:/${subRuta}:/content`;
+    resp = await fetch(url, {
       method: 'PUT',
       headers: { 'Authorization': 'Bearer ' + state.token, 'Content-Type': state.archivo.type || 'application/octet-stream' },
       body: state.archivo
@@ -467,21 +470,23 @@ async function subirArchivo() {
   return ruta;
 }
 
-let _carpetaId = null;
+let _carpetaCache = null;
 async function obtenerCarpetaCompartida() {
-  if (_carpetaId) return _carpetaId;
-  const resp = await fetch('https://graph.microsoft.com/v1.0/me/drive/sharedWithMe?$select=id,name,remoteItem', {
+  if (_carpetaCache) return _carpetaCache;
+  const resp = await fetch('https://graph.microsoft.com/v1.0/me/drive/sharedWithMe', {
     headers: { 'Authorization': 'Bearer ' + state.token }
   });
   if (!resp.ok) throw new Error('No se pudo acceder a archivos compartidos');
   const data = await resp.json();
-  console.log('Compartidos:', JSON.stringify(data.value?.map(i=>i.name)));
+  console.log('Compartidos:', data.value?.map(i => i.name + ' id:' + i.id));
   const carpeta = data.value?.find(i => i.name === 'JCCFACTURAS');
-  if (!carpeta) throw new Error('Carpeta JCCFACTURAS no encontrada en compartidos. ¿Aceptaste la invitación?');
-  // Usar remoteItem.id si existe (carpeta de otro tenant)
-  _carpetaId = carpeta.remoteItem?.id || carpeta.id;
-  console.log('Carpeta compartida ID:', _carpetaId);
-  return _carpetaId;
+  if (!carpeta) throw new Error('Carpeta JCCFACTURAS no encontrada en compartidos');
+  // remoteItem contiene el driveId del owner y el itemId de la carpeta
+  const driveId = carpeta.remoteItem?.parentReference?.driveId;
+  const itemId  = carpeta.remoteItem?.id || carpeta.id;
+  console.log('driveId:', driveId, 'itemId:', itemId);
+  _carpetaCache = { driveId, itemId };
+  return _carpetaCache;
 }
 
 // ── GUARDAR ──
