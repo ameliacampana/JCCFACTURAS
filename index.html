@@ -243,7 +243,7 @@ const msalConfig = {
   cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
 };
 let msalInstance = null;
-const loginRequest = { scopes: ['Files.ReadWrite', 'User.Read'] };
+const loginRequest = { scopes: ['Files.ReadWrite.All', 'User.Read'] };
 
 let state = { canal:null, archivo:null, impuesto:null, categoria:null, mes:null, token:null };
 let currentAccount = null;
