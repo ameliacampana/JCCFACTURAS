@@ -517,6 +517,28 @@ async function subirArchivo() {
     body: state.archivo
   });
 
+  // Si falla con 404, intentar en carpeta compartida
+  if (resp.status === 404 || resp.status === 400) {
+    console.log('No encontrado en drive propio, buscando en compartidos...');
+    const itemId = await obtenerItemCompartido();
+    const subRutaSinRaiz = ruta.replace(CARPETA_RAIZ + '/', '') + '/' + nombre;
+    endpoint = `https://graph.microsoft.com/v1.0/me/drive/items/${itemId}:/${encodeURIComponent(subRutaSinRaiz)}:/content`;
+    
+    const resp2 = await fetch(endpoint, {
+      method: 'PUT',
+      headers: {
+        'Authorization': 'Bearer ' + state.token,
+        'Content-Type': state.archivo.type || 'application/octet-stream'
+      },
+      body: state.archivo
+    });
+    if (!resp2.ok) {
+      const err = await resp2.text();
+      throw new Error(`Error ${resp2.status}: ${err}`);
+    }
+    return ruta;
+  }
+  
   if (!resp.ok) {
     const err = await resp.text();
     throw new Error(`Error ${resp.status}: ${err}`);
