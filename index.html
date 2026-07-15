@@ -487,8 +487,12 @@ async function obtenerCarpetaCompartida() {
     errDiv.style.display = 'block';
   }
   
-  const carpeta = data.value?.find(i => i.name === 'JCCFACTURAS');
-  if (!carpeta) throw new Error('JCCFACTURAS no está en compartidos. Encontrados: ' + JSON.stringify(nombres));
+  // La carpeta puede aparecer con el nombre del contacto o el nombre real
+  const carpeta = data.value?.find(i => 
+    i.name === 'JCCFACTURAS' || i.name === 'Juan Carlos' || 
+    i.remoteItem?.name === 'JCCFACTURAS'
+  );
+  if (!carpeta) throw new Error('Carpeta no encontrada. Encontrados: ' + JSON.stringify(nombres));
   
   const driveId = carpeta.remoteItem?.parentReference?.driveId;
   const itemId  = carpeta.remoteItem?.id || carpeta.id;
