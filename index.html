@@ -433,76 +433,48 @@ function nombreArchivo(file) {
   return `${base}.${ext}`;
 }
 
+// IDs hardcodeados de la carpeta JCCFACTURAS en OneDrive de Amelia
+// Obtenidos del link de compartir de SharePoint
+const OWNER_SITE     = 'campanaprocesos-my.sharepoint.com';
+const OWNER_PATH     = '/personal/ameliacampana_campanaprocesos_onmicrosoft_com';
+const CARPETA_ITEM_ID = '8d092552-a1d6-40c4-bc17-e4e28dee15ff';
+
 async function subirArchivo() {
   const t = await msalInstance.acquireTokenSilent({ ...loginRequest, account: currentAccount });
   state.token = t.accessToken;
   const ruta   = rutaOneDrive();
   const nombre = nombreArchivo(state.archivo);
 
-  // Detectar si es cuenta propietaria (Amelia) o usuario externo (itucam)
+  // Detectar cuenta dueña vs usuario externo
   const esAmelia = currentAccount.username.toLowerCase().includes('campanaprocesos') ||
                    currentAccount.username.toLowerCase().includes('ameliacampana');
 
-  let resp;
+  let url;
   if (esAmelia) {
-    // Cuenta dueña → subir directo a su drive
+    // Subir directo al drive propio
     const path = ruta.split('/').concat([nombre]).map(encodeURIComponent).join('/');
-    const url  = `https://graph.microsoft.com/v1.0/me/drive/root:/${path}:/content`;
-    resp = await fetch(url, {
-      method: 'PUT',
-      headers: { 'Authorization': 'Bearer ' + state.token, 'Content-Type': state.archivo.type || 'application/octet-stream' },
-      body: state.archivo
-    });
+    url = `https://graph.microsoft.com/v1.0/me/drive/root:/${path}:/content`;
   } else {
-    // Usuario externo → usar carpeta compartida
-    const { driveId, itemId } = await obtenerCarpetaCompartida();
+    // Subir via el site de SharePoint del owner usando el itemId de la carpeta
+    // La subruta es todo excepto "JCCFACTURAS/" (la carpeta raíz compartida)
     const subRuta = ruta.split('/').slice(1).concat([nombre]).map(encodeURIComponent).join('/');
-    const url = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}:/${subRuta}:/content`;
-    resp = await fetch(url, {
-      method: 'PUT',
-      headers: { 'Authorization': 'Bearer ' + state.token, 'Content-Type': state.archivo.type || 'application/octet-stream' },
-      body: state.archivo
-    });
+    url = `https://graph.microsoft.com/v1.0/sites/${OWNER_SITE}:${OWNER_PATH}:/drive/items/${CARPETA_ITEM_ID}:/${subRuta}:/content`;
   }
+
+  console.log('Subiendo a:', url.substring(0, 100));
+
+  const resp = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Authorization': 'Bearer ' + state.token,
+      'Content-Type': state.archivo.type || 'application/octet-stream'
+    },
+    body: state.archivo
+  });
 
   const data = await resp.json();
   if (!resp.ok) throw new Error(JSON.stringify(data.error || data));
   return ruta;
-}
-
-let _carpetaCache = null;
-async function obtenerCarpetaCompartida() {
-  if (_carpetaCache) return _carpetaCache;
-  const resp = await fetch('https://graph.microsoft.com/v1.0/me/drive/sharedWithMe', {
-    headers: { 'Authorization': 'Bearer ' + state.token }
-  });
-  if (!resp.ok) throw new Error('Error accediendo compartidos: ' + resp.status);
-  const data = await resp.json();
-  
-  // Mostrar diagnóstico en pantalla
-  const nombres = data.value?.map(i => i.name) || [];
-  const errDiv = document.getElementById('error-guardar');
-  if (errDiv) {
-    errDiv.textContent = 'Compartidos encontrados: ' + JSON.stringify(nombres);
-    errDiv.style.display = 'block';
-  }
-  
-  // La carpeta puede aparecer con el nombre del contacto o el nombre real
-  const carpeta = data.value?.find(i => 
-    i.name === 'JCCFACTURAS' || i.name === 'Juan Carlos' || 
-    i.remoteItem?.name === 'JCCFACTURAS'
-  );
-  if (!carpeta) throw new Error('Carpeta no encontrada. Encontrados: ' + JSON.stringify(nombres));
-  
-  const driveId = carpeta.remoteItem?.parentReference?.driveId;
-  const itemId  = carpeta.remoteItem?.id || carpeta.id;
-  
-  if (errDiv) {
-    errDiv.textContent = 'Carpeta OK — driveId: ' + driveId + ' itemId: ' + itemId;
-  }
-  
-  _carpetaCache = { driveId, itemId };
-  return _carpetaCache;
 }
 
 // ── GUARDAR ──
