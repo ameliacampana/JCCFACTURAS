@@ -303,26 +303,15 @@ async function login() {
   btn.disabled = true;
   btn.textContent = 'Conectando...';
   try {
-    // Intentar popup primero (mejor en móvil)
-    const resp = await msalInstance.loginPopup({
+    await msalInstance.loginRedirect({
       ...loginRequest,
       loginHint: 'itucam@hotmail.com'
     });
-    onLogin(resp);
-  } catch(popupError) {
-    console.warn('Popup falló, intentando redirect:', popupError);
-    // Si popup falla (bloqueado), usar redirect
-    try {
-      await msalInstance.loginRedirect({
-        ...loginRequest,
-        loginHint: 'itucam@hotmail.com'
-      });
-    } catch(redirectError) {
-      console.error('Redirect también falló:', redirectError);
-      mostrarError('No se pudo conectar: ' + redirectError.message);
-      btn.disabled = false;
-      btn.textContent = 'Ingresar con cuenta Microsoft';
-    }
+  } catch(e) {
+    console.error('Login error:', e);
+    mostrarError('No se pudo conectar: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Ingresar con cuenta Microsoft';
   }
 }
 
