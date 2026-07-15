@@ -137,6 +137,7 @@
     <h2>Facturas al estudio</h2>
     <p>Guardá facturas, tickets y resúmenes directamente en OneDrive, organizados por mes y tipo.</p>
     <button id="btn-login" onclick="login()">Ingresar con cuenta Microsoft</button>
+    <div id="error-login" style="display:none;color:#8b1a1a;background:#fdf0f0;border:1px solid #f0b0b0;border-radius:8px;padding:10px 14px;font-size:13px;max-width:300px;text-align:left"></div>
   </div>
 
   <!-- APP -->
@@ -230,10 +231,10 @@
 // CONFIGURACIÓN
 // ══════════════════════════════════════════
 const CLIENT_ID  = '06757076-a0d6-448d-8dc0-2d30e7b96eff';
-const TENANT_ID  = 'common'; // permite hotmail + cuentas org
+const TENANT_ID  = 'common';
 const REDIRECT   = 'https://ameliacampana.github.io/JCCFACTURAS/';
 
-// OneDrive PROFESIONAL de Amelia — ruta SharePoint
+// OneDrive PROFESIONAL de Amelia
 const SHAREPOINT_HOST = 'campanaprocesos-my.sharepoint.com';
 const OWNER_PATH      = '/personal/ameliacampana_campanaprocesos_onmicrosoft_com';
 const CARPETA_RAIZ    = 'JCCFACTURAS';
@@ -241,18 +242,16 @@ const CARPETA_RAIZ    = 'JCCFACTURAS';
 const msalConfig = {
   auth: {
     clientId: CLIENT_ID,
-    authority: `https://login.microsoftonline.com/${TENANT_ID}`,
+    authority: 'https://login.microsoftonline.com/common',
     redirectUri: REDIRECT,
+    navigateToLoginRequestUrl: true,
   },
-  cache: { cacheLocation: 'sessionStorage' }
+  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
 };
 const msalInstance = new msal.PublicClientApplication(msalConfig);
+// Scopes mínimos para el login — SharePoint se pide después al subir
 const loginRequest = {
-  scopes: [
-    'Files.ReadWrite.All',
-    'User.Read',
-    `https://${SHAREPOINT_HOST}/AllSites.Write`
-  ]
+  scopes: ['Files.ReadWrite.All', 'User.Read']
 };
 
 // ══════════════════════════════════════════
@@ -266,33 +265,78 @@ const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto'
 // AUTH
 // ══════════════════════════════════════════
 async function init() {
-  await msalInstance.initialize();
-  const resp = await msalInstance.handleRedirectPromise();
-  if (resp) { onLogin(resp); return; }
-  const accounts = msalInstance.getAllAccounts();
-  if (accounts.length > 0) {
-    currentAccount = accounts[0];
-    try {
-      const silent = await msalInstance.acquireTokenSilent({ ...loginRequest, account: currentAccount });
-      state.token = silent.accessToken;
-      showApp(currentAccount.name || currentAccount.username);
-    } catch(e) { showLogin(); }
-  } else { showLogin(); }
+  try {
+    await msalInstance.initialize();
+    const resp = await msalInstance.handleRedirectPromise().catch(e => {
+      console.warn('handleRedirectPromise error:', e);
+      return null;
+    });
+    if (resp) { onLogin(resp); return; }
+    const accounts = msalInstance.getAllAccounts();
+    if (accounts.length > 0) {
+      currentAccount = accounts[0];
+      try {
+        const silent = await msalInstance.acquireTokenSilent({ ...loginRequest, account: currentAccount });
+        state.token = silent.accessToken;
+        showApp(currentAccount.name || currentAccount.username);
+      } catch(e) {
+        console.warn('Silent token failed, showing login');
+        showLogin();
+      }
+    } else {
+      showLogin();
+    }
+  } catch(e) {
+    console.error('Init error:', e);
+    showLogin();
+    mostrarError('Error al inicializar: ' + e.message);
+  }
 }
 
 async function login() {
-  await msalInstance.loginRedirect({
-    ...loginRequest,
-    loginHint: 'itucam@hotmail.com' // pre-completa el mail del padre
-  });
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true;
+  btn.textContent = 'Conectando...';
+  try {
+    // Intentar popup primero (mejor en móvil)
+    const resp = await msalInstance.loginPopup({
+      ...loginRequest,
+      loginHint: 'itucam@hotmail.com'
+    });
+    onLogin(resp);
+  } catch(popupError) {
+    console.warn('Popup falló, intentando redirect:', popupError);
+    // Si popup falla (bloqueado), usar redirect
+    try {
+      await msalInstance.loginRedirect({
+        ...loginRequest,
+        loginHint: 'itucam@hotmail.com'
+      });
+    } catch(redirectError) {
+      console.error('Redirect también falló:', redirectError);
+      mostrarError('No se pudo conectar: ' + redirectError.message);
+      btn.disabled = false;
+      btn.textContent = 'Ingresar con cuenta Microsoft';
+    }
+  }
 }
+
+function mostrarError(msg) {
+  const el = document.getElementById('error-login');
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+
 function onLogin(resp) {
   currentAccount = resp.account;
   state.token = resp.accessToken;
   showApp(currentAccount.name || currentAccount.username);
 }
 async function logout() {
-  await msalInstance.logoutRedirect({ account: currentAccount });
+  try {
+    await msalInstance.logoutRedirect({ account: currentAccount });
+  } catch(e) {
+    msalInstance.logoutPopup({ account: currentAccount });
+  }
 }
 
 function showLogin() {
