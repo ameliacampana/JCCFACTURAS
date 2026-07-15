@@ -228,17 +228,10 @@
 
 <script src="msal-browser.min.js"></script>
 <script>
-// ══════════════════════════════════════════
-// CONFIGURACIÓN
-// ══════════════════════════════════════════
 const CLIENT_ID  = '06757076-a0d6-448d-8dc0-2d30e7b96eff';
 const TENANT_ID  = 'common';
 const REDIRECT   = 'https://ameliacampana.github.io/JCCFACTURAS/';
-
-// OneDrive PROFESIONAL de Amelia
-const SHAREPOINT_HOST = 'campanaprocesos-my.sharepoint.com';
-const OWNER_PATH      = '/personal/ameliacampana_campanaprocesos_onmicrosoft_com';
-const CARPETA_RAIZ    = 'JCCFACTURAS';
+const CARPETA_RAIZ = 'JCCFACTURAS';
 
 const msalConfig = {
   auth: {
@@ -249,30 +242,19 @@ const msalConfig = {
   },
   cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
 };
-// Declarar como let — se instancia dentro de init() cuando MSAL ya cargó
 let msalInstance = null;
-const loginRequest = {
-  scopes: ['Files.ReadWrite.All', 'User.Read']
-};
+const loginRequest = { scopes: ['Files.ReadWrite', 'User.Read'] };
 
-// ══════════════════════════════════════════
-// ESTADO
-// ══════════════════════════════════════════
 let state = { canal:null, archivo:null, impuesto:null, categoria:null, mes:null, token:null };
 let currentAccount = null;
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-// ══════════════════════════════════════════
-// AUTH
-// ══════════════════════════════════════════
+// ── AUTH ──
 async function init() {
   try {
     msalInstance = new msal.PublicClientApplication(msalConfig);
     await msalInstance.initialize();
-    const resp = await msalInstance.handleRedirectPromise().catch(e => {
-      console.warn('handleRedirectPromise error:', e);
-      return null;
-    });
+    const resp = await msalInstance.handleRedirectPromise().catch(e => null);
     if (resp) { onLogin(resp); return; }
     const accounts = msalInstance.getAllAccounts();
     if (accounts.length > 0) {
@@ -281,38 +263,23 @@ async function init() {
         const silent = await msalInstance.acquireTokenSilent({ ...loginRequest, account: currentAccount });
         state.token = silent.accessToken;
         showApp(currentAccount.name || currentAccount.username);
-      } catch(e) {
-        console.warn('Silent token failed, showing login');
-        showLogin();
-      }
-    } else {
-      showLogin();
-    }
+      } catch(e) { showLogin(); }
+    } else { showLogin(); }
   } catch(e) {
-    console.error('Init error:', e);
     showLogin();
     mostrarError('Error al inicializar: ' + e.message);
   }
 }
 
 async function login() {
-  if (!msalInstance) {
-    mostrarError('La app aún está cargando, esperá un momento y volvé a intentar.');
-    return;
-  }
+  if (!msalInstance) { mostrarError('Cargando, esperá un momento...'); return; }
   const btn = document.getElementById('btn-login');
-  btn.disabled = true;
-  btn.textContent = 'Conectando...';
+  btn.disabled = true; btn.textContent = 'Conectando...';
   try {
-    await msalInstance.loginRedirect({
-      ...loginRequest,
-      prompt: 'select_account'  // Siempre muestra selector de cuenta
-    });
+    await msalInstance.loginRedirect({ ...loginRequest, prompt: 'select_account' });
   } catch(e) {
-    console.error('Login error:', e);
-    mostrarError('No se pudo conectar: ' + e.message);
-    btn.disabled = false;
-    btn.textContent = 'Ingresar con cuenta Microsoft';
+    mostrarError('Error: ' + e.message);
+    btn.disabled = false; btn.textContent = 'Ingresar con cuenta Microsoft';
   }
 }
 
@@ -326,21 +293,12 @@ function onLogin(resp) {
   state.token = resp.accessToken;
   showApp(currentAccount.name || currentAccount.username);
 }
+
 async function logout() {
   try {
-    // Limpiar toda la caché local
-    localStorage.clear();
-    sessionStorage.clear();
-    // Logout con redirect a Microsoft para limpiar sesión
-    await msalInstance.logoutRedirect({
-      account: currentAccount,
-      postLogoutRedirectUri: REDIRECT
-    });
-  } catch(e) {
-    localStorage.clear();
-    sessionStorage.clear();
-    window.location.reload();
-  }
+    localStorage.clear(); sessionStorage.clear();
+    await msalInstance.logoutRedirect({ account: currentAccount, postLogoutRedirectUri: REDIRECT });
+  } catch(e) { localStorage.clear(); sessionStorage.clear(); window.location.reload(); }
 }
 
 function showLogin() {
@@ -348,6 +306,7 @@ function showLogin() {
   document.getElementById('screen-app').style.display   = 'none';
   document.getElementById('btn-logout').style.display   = 'none';
 }
+
 function showApp(nombre) {
   document.getElementById('screen-login').style.display = 'none';
   document.getElementById('screen-app').style.display   = 'flex';
@@ -357,32 +316,26 @@ function showApp(nombre) {
   resetForm();
 }
 
-// ══════════════════════════════════════════
-// MESES
-// ══════════════════════════════════════════
+// ── MESES ──
 function buildMeses() {
   const g = document.getElementById('meses-grid');
   g.innerHTML = '';
   const mesActual = new Date().getMonth();
   MESES.forEach((m,i) => {
     const b = document.createElement('div');
-    b.className = 'mes-btn' + (i===mesActual?' selected':'');
-    b.textContent = m.substring(0,3);
-    b.title = m;
+    b.className = 'mes-btn' + (i===mesActual ? ' selected' : '');
+    b.textContent = m.substring(0,3); b.title = m;
     b.onclick = () => selMes(m, b);
     g.appendChild(b);
   });
   state.mes = MESES[mesActual];
 }
 
-// ══════════════════════════════════════════
-// PASO 1
-// ══════════════════════════════════════════
+// ── PASO 1 ──
 function selCanal(canal, el) {
   document.querySelectorAll('.opt-btn').forEach(b=>b.classList.remove('selected'));
   el.classList.add('selected');
-  state.canal = canal;
-  state.archivo = null;
+  state.canal = canal; state.archivo = null;
   document.getElementById('file-preview-box').innerHTML = '';
   document.getElementById('mail-instruccion').style.display = 'none';
   if (canal==='foto')    document.getElementById('input-foto').click();
@@ -416,14 +369,11 @@ function quitarArchivo() {
   ['input-foto','input-archivo','input-banco'].forEach(id=>document.getElementById(id).value='');
 }
 
-// ══════════════════════════════════════════
-// PASO 2
-// ══════════════════════════════════════════
+// ── PASO 2 ──
 function selImpuesto(imp, el) {
   document.querySelectorAll('.imp-btn').forEach(b=>b.classList.remove('selected'));
   el.classList.add('selected');
-  state.impuesto = imp;
-  state.categoria = null;
+  state.impuesto = imp; state.categoria = null;
   document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('selected'));
   document.getElementById('bloque-cat').style.display = imp==='Ganancias' ? 'block' : 'none';
   actualizarRuta();
@@ -445,14 +395,10 @@ function selMes(mes, el) {
   actualizarRuta();
 }
 
-// ══════════════════════════════════════════
-// PASO 3
-// ══════════════════════════════════════════
+// ── PASO 3 ──
 function rutaOneDrive() {
   const año = new Date().getFullYear();
-  if (state.impuesto==='IVA') {
-    return `${CARPETA_RAIZ}/${año}/IVA/${state.mes}`;
-  }
+  if (state.impuesto==='IVA') return `${CARPETA_RAIZ}/${año}/IVA/${state.mes}`;
   return `${CARPETA_RAIZ}/${año}/Ganancias/${state.categoria}`;
 }
 
@@ -462,22 +408,19 @@ function actualizarRuta() {
   const r = document.getElementById('ruta-preview');
   r.style.display = 'block';
   r.innerHTML = `📁 <strong>${ruta}/</strong>`;
-  const canal = { foto:'Foto', archivo:'Archivo subido', banco:'Resumen bancario PDF', mail:'Reenvío de mail' };
+  const canales = { foto:'Foto', archivo:'Archivo subido', banco:'Resumen bancario PDF', mail:'Reenvío de mail' };
   document.getElementById('resumen-op').innerHTML =
-    `<b>Canal:</b> ${canal[state.canal]||'-'}<br>
+    `<b>Canal:</b> ${canales[state.canal]||'-'}<br>
      <b>Impuesto:</b> ${state.impuesto}${state.categoria?' — '+state.categoria:''}<br>
      <b>Mes:</b> ${state.mes}<br>
      <b>Archivo:</b> ${state.archivo ? state.archivo.name : '—'}`;
   const listo = state.impuesto &&
     (state.impuesto==='IVA' || state.categoria) &&
-    state.mes &&
-    (state.canal==='mail' || state.archivo);
+    state.mes && (state.canal==='mail' || state.archivo);
   document.getElementById('btn-guardar').disabled = !listo;
 }
 
-// ══════════════════════════════════════════
-// SUBIR A ONEDRIVE PROFESIONAL (SharePoint)
-// ══════════════════════════════════════════
+// ── SUBIR A ONEDRIVE ──
 function nombreArchivo(file) {
   const d = new Date();
   const fecha = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
@@ -491,27 +434,90 @@ function nombreArchivo(file) {
 async function subirArchivo() {
   const t = await msalInstance.acquireTokenSilent({ ...loginRequest, account: currentAccount });
   state.token = t.accessToken;
-
   const ruta   = rutaOneDrive();
   const nombre = nombreArchivo(state.archivo);
-  const pathCompleto = ruta + '/' + nombre;
-
-  // Subir directo con conflictBehavior=replace — Graph crea las carpetas automáticamente
-  const url = 'https://graph.microsoft.com/v1.0/me/drive/root:/' + 
-    pathCompleto.split('/').map(encodeURIComponent).join('/') + ':/content';
-
-  const resp = await fetch(url, {
+  const path   = ruta.split('/').concat([nombre]).map(encodeURIComponent).join('/');
+  const url    = `https://graph.microsoft.com/v1.0/me/drive/root:/${path}:/content`;
+  const resp   = await fetch(url, {
     method: 'PUT',
-    headers: {
-      'Authorization': 'Bearer ' + state.token,
-      'Content-Type': state.archivo.type || 'application/octet-stream'
-    },
+    headers: { 'Authorization': 'Bearer ' + state.token, 'Content-Type': state.archivo.type || 'application/octet-stream' },
     body: state.archivo
   });
-
   const data = await resp.json();
   if (!resp.ok) throw new Error(JSON.stringify(data.error || data));
   return ruta;
 }
 
+// ── GUARDAR ──
+async function guardar() {
+  if (state.canal==='mail') {
+    toast('Reenviá el mail al estudio contable 📧', 'ok', 4000);
+    setTimeout(resetForm, 4200); return;
+  }
+  if (!state.archivo) { toast('Seleccioná un archivo primero', 'err'); return; }
+  const btn = document.getElementById('btn-guardar');
+  btn.disabled = true; btn.innerHTML = '<span>⏳</span> Subiendo...';
+  setProgress(30);
+  try {
+    const ruta = await subirArchivo();
+    setProgress(100);
+    toast(`✅ Guardado en ${ruta}`, 'ok', 4000);
+    setTimeout(resetForm, 4200);
+  } catch(e) {
+    console.error(e);
+    const errDiv = document.getElementById('error-guardar');
+    if (errDiv) { errDiv.textContent = e.message; errDiv.style.display='block'; }
+    toast('Error al guardar', 'err', 6000);
+    btn.disabled = false; btn.innerHTML = '<span>☁️</span> Guardar en OneDrive';
+    setProgress(0);
+  }
+}
 
+// ── HELPERS ──
+function showPaso(n) {
+  document.getElementById('paso2').style.display = n>=2 ? 'block' : 'none';
+  document.getElementById('paso3').style.display = n>=3 ? 'block' : 'none';
+  [1,2,3].forEach(i => {
+    document.getElementById('dot'+i).className = 'step-dot' + (i<n?' done':i===n?' active':'');
+  });
+  [1,2].forEach(i => {
+    document.getElementById('line'+i).className = 'step-line' + (i<n?' done':'');
+  });
+  const labels = ['','Paso 1 — ¿Cómo llega el comprobante?','Paso 2 — Clasificá el gasto','Paso 3 — Confirmá y guardá'];
+  document.getElementById('step-label').textContent = labels[n] || '';
+  if (n>=3) actualizarRuta();
+}
+
+function resetForm() {
+  state = { ...state, canal:null, archivo:null, impuesto:null, categoria:null, mes:MESES[new Date().getMonth()] };
+  document.querySelectorAll('.opt-btn,.imp-btn,.cat-btn').forEach(b=>b.classList.remove('selected'));
+  document.getElementById('file-preview-box').innerHTML = '';
+  document.getElementById('mail-instruccion').style.display = 'none';
+  document.getElementById('bloque-cat').style.display = 'none';
+  document.getElementById('ruta-preview').style.display = 'none';
+  document.getElementById('resumen-op').innerHTML = '';
+  document.getElementById('btn-guardar').disabled = true;
+  document.getElementById('btn-guardar').innerHTML = '<span>☁️</span> Guardar en OneDrive';
+  const eg = document.getElementById('error-guardar');
+  if (eg) eg.style.display = 'none';
+  ['input-foto','input-archivo','input-banco'].forEach(id=>document.getElementById(id).value='');
+  showPaso(1); buildMeses(); setProgress(0);
+}
+
+function setProgress(pct) {
+  const bar = document.getElementById('progress-bar');
+  bar.style.display = pct>0 && pct<100 ? 'block' : 'none';
+  bar.style.width = pct + '%';
+}
+
+function toast(msg, tipo='', dur=3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'show ' + tipo;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.className = ''; }, dur);
+}
+
+init();
+</script>
+</body>
+</html>
