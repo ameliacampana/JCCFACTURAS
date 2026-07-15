@@ -486,8 +486,18 @@ async function subirArchivo() {
   const ruta   = rutaOneDrive();
   const nombre = nombreArchivo(state.archivo);
 
-  // Subir al OneDrive del OWNER (Amelia) vía Graph con ruta SharePoint
-  const endpoint = `https://graph.microsoft.com/v1.0/sites/${SHAREPOINT_HOST}:${OWNER_PATH}:/drive/root:/${encodeURIComponent(ruta)}/${encodeURIComponent(nombre)}:/content`;
+  // Buscar la carpeta JCCFACTURAS en los drives compartidos con el usuario
+  // (Amelia compartió JCCFACTURAS con itucam@hotmail.com)
+  const driveId = await obtenerDriveCompartido();
+  
+  // Subir el archivo al drive compartido
+  // Si tenemos el itemId raíz de la carpeta compartida, navegar desde ahí
+  let endpoint;
+  if (_rootItemId) {
+    endpoint = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${_rootItemId}:/${encodeURIComponent(ruta.replace(CARPETA_RAIZ+'/', ''))}/${encodeURIComponent(nombre)}:/content`;
+  } else {
+    endpoint = `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encodeURIComponent(ruta)}/${encodeURIComponent(nombre)}:/content`;
+  }
 
   const resp = await fetch(endpoint, {
     method: 'PUT',
@@ -504,6 +514,39 @@ async function subirArchivo() {
   }
   return ruta;
 }
+
+// Cache del driveId para no buscarlo en cada subida
+let _driveId = null;
+
+async function obtenerDriveCompartido() {
+  if (_driveId) return _driveId;
+  
+  // Buscar en los items compartidos conmigo la carpeta JCCFACTURAS
+  const resp = await fetch(
+    'https://graph.microsoft.com/v1.0/me/drive/sharedWithMe',
+    { headers: { 'Authorization': 'Bearer ' + state.token } }
+  );
+  
+  if (!resp.ok) throw new Error('No se pudo acceder a los archivos compartidos');
+  
+  const data = await resp.json();
+  const carpeta = data.value.find(item => 
+    item.name === 'JCCFACTURAS' && item.folder
+  );
+  
+  if (!carpeta) throw new Error('No se encontró la carpeta JCCFACTURAS compartida. Verificá que Amelia la compartió con esta cuenta.');
+  
+  // El driveId es el del remote item
+  _driveId = carpeta.remoteItem ? carpeta.remoteItem.parentReference.driveId : carpeta.parentReference.driveId;
+  
+  // Actualizar el item ID raíz para navegar desde ahí
+  _rootItemId = carpeta.remoteItem ? carpeta.remoteItem.id : carpeta.id;
+  
+  console.log('Drive compartido encontrado:', _driveId);
+  return _driveId;
+}
+
+let _rootItemId = null;
 
 // ══════════════════════════════════════════
 // GUARDAR
