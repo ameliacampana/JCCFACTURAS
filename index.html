@@ -127,7 +127,7 @@
     <h1>⚽ JCCFacturas</h1>
     <p id="header-user">Iniciá sesión para continuar</p>
   </div>
-  <button id="btn-logout" onclick="logout()">Salir</button>
+  <button id="btn-logout" onclick="logout()">Cambiar cuenta</button>
 </header>
 
 <main>
@@ -305,7 +305,7 @@ async function login() {
   try {
     await msalInstance.loginRedirect({
       ...loginRequest,
-      loginHint: 'itucam@hotmail.com'
+      prompt: 'select_account'  // Siempre muestra selector de cuenta
     });
   } catch(e) {
     console.error('Login error:', e);
@@ -327,9 +327,18 @@ function onLogin(resp) {
 }
 async function logout() {
   try {
-    await msalInstance.logoutRedirect({ account: currentAccount });
+    // Limpiar toda la caché local
+    localStorage.clear();
+    sessionStorage.clear();
+    // Logout con redirect a Microsoft para limpiar sesión
+    await msalInstance.logoutRedirect({
+      account: currentAccount,
+      postLogoutRedirectUri: REDIRECT
+    });
   } catch(e) {
-    msalInstance.logoutPopup({ account: currentAccount });
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.reload();
   }
 }
 
