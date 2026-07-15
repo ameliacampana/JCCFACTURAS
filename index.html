@@ -215,6 +215,7 @@
           <span>☁️</span> Guardar en OneDrive
         </button>
       </div>
+      <div id="error-guardar" style="display:none;margin-top:8px;color:#8b1a1a;background:#fdf0f0;border:1px solid #f0b0b0;border-radius:8px;padding:10px 14px;font-size:12px;word-break:break-all"></div>
       <div style="margin-top:10px">
         <button onclick="resetForm()" style="background:none;border:none;color:var(--sub);font-size:13px;cursor:pointer;text-decoration:underline">
           ← Cargar otro comprobante
@@ -593,16 +594,43 @@ async function guardar() {
   const btn = document.getElementById('btn-guardar');
   btn.disabled = true;
   btn.innerHTML = '<span>⏳</span> Subiendo...';
-  setProgress(30);
+  setProgress(10);
 
   try {
+    // Test 1: verificar token y acceso al drive
+    const t = await msalInstance.acquireTokenSilent({ ...loginRequest, account: currentAccount });
+    state.token = t.accessToken;
+    console.log('Token OK, usuario:', currentAccount.username);
+    
+    setProgress(20);
+    
+    // Test 2: verificar acceso al drive
+    const driveResp = await fetch('https://graph.microsoft.com/v1.0/me/drive', {
+      headers: { 'Authorization': 'Bearer ' + state.token }
+    });
+    const driveData = await driveResp.json();
+    console.log('Drive status:', driveResp.status, 'Drive:', JSON.stringify(driveData).substring(0,200));
+    
+    if (!driveResp.ok) {
+      throw new Error(`Sin acceso al drive: ${driveResp.status} — ${JSON.stringify(driveData)}`);
+    }
+    
+    setProgress(40);
     const ruta = await subirArchivo();
     setProgress(100);
     toast(`✅ Guardado en ${ruta}`, 'ok', 4000);
     setTimeout(resetForm, 4200);
   } catch(e) {
-    console.error(e);
-    toast('Error: ' + e.message, 'err', 6000);
+    console.error('Error completo:', e);
+    // Mostrar error completo en pantalla
+    const errDiv = document.getElementById('error-guardar') || document.getElementById('error-login');
+    if (errDiv) { 
+      errDiv.textContent = e.message; 
+      errDiv.style.display = 'block';
+      // Scroll al error
+      errDiv.scrollIntoView({behavior: 'smooth'});
+    }
+    toast('Error: ' + e.message.substring(0,80), 'err', 8000);
     btn.disabled = false;
     btn.innerHTML = '<span>☁️</span> Guardar en OneDrive';
     setProgress(0);
