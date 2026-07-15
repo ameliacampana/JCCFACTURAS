@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<meta name="theme-color" content="#1a1a2e">
+<meta name="theme-color" content="#003087">
 <title>JCCFacturas</title>
 <link rel="manifest" href="manifest.json">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #f5f4f0; --surface: #ffffff; --border: #e0ddd8;
+    --bg: #f0f3f8; --surface: #ffffff; --border: #e0ddd8;
     --text: #1a1a1a; --sub: #6b6b6b;
-    --accent: #1a3a5c; --accent2: #2e6da4;
-    --ok: #1a6b3c; --ok-bg: #e8f5ed;
+    --accent: #003087; --accent2: #C8102E;
+    --ok: #003087; --ok-bg: #e6edf8;
     --err: #8b1a1a; --radius: 12px;
     --shadow: 0 2px 12px rgba(0,0,0,.08);
   }
@@ -66,8 +66,8 @@
   .opt-btn .icon  { font-size: 26px; }
   .opt-btn .label { font-size: 13px; font-weight: 500; color: var(--text); }
   .opt-btn .sub   { font-size: 11px; color: var(--sub); }
-  .opt-btn.selected { border-color: var(--accent); background: #eef3fa; }
-  .opt-btn.selected .label { color: var(--accent); }
+  .opt-btn.selected { border-color: #003087; background: #e6edf8; }
+  .opt-btn.selected .label { color: #003087; }
 
   /* Impuesto */
   .imp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -75,18 +75,18 @@
   .imp-btn .icon  { font-size: 30px; display: block; margin-bottom: 6px; }
   .imp-btn .label { font-size: 15px; font-weight: 600; color: var(--text); }
   .imp-btn .sub   { font-size: 11px; color: var(--sub); margin-top: 3px; }
-  .imp-btn.selected { border-color: var(--accent); background: #eef3fa; }
-  .imp-btn.selected .label { color: var(--accent); }
+  .imp-btn.selected { border-color: #003087; background: #e6edf8; }
+  .imp-btn.selected .label { color: #003087; }
 
   /* Categorías */
   .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
   .cat-btn { border: 1.5px solid var(--border); background: #fafaf8; border-radius: 8px; padding: 10px 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text); text-align: center; transition: all .15s; }
-  .cat-btn.selected { border-color: var(--accent); background: #eef3fa; color: var(--accent); }
+  .cat-btn.selected { border-color: #C8102E; background: #fde8eb; color: #C8102E; }
 
   /* Meses */
   .meses-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; }
   .mes-btn { border: 1.5px solid var(--border); background: #fafaf8; border-radius: 8px; padding: 8px 4px; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--text); text-align: center; transition: all .15s; }
-  .mes-btn.selected { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .mes-btn.selected { border-color: #C8102E; background: #C8102E; color: #fff; }
 
   /* File preview */
   .file-preview { display: flex; align-items: center; gap: 10px; background: #f5f8fc; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
@@ -98,7 +98,7 @@
   .file-preview .btn-rm { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--sub); padding: 0 4px; }
 
   /* Botón guardar */
-  #btn-guardar { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: var(--radius); padding: 16px; font-size: 16px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow); display: flex; align-items: center; justify-content: center; gap: 8px; }
+  #btn-guardar { width: 100%; background: linear-gradient(90deg, #003087 60%, #C8102E 100%); color: #fff; border: none; border-radius: var(--radius); padding: 16px; font-size: 16px; font-weight: 600; cursor: pointer; box-shadow: var(--shadow); display: flex; align-items: center; justify-content: center; gap: 8px; }
   #btn-guardar:disabled { opacity: .45; cursor: not-allowed; }
 
   /* Ruta */
@@ -124,7 +124,7 @@
 
 <header>
   <div>
-    <h1>JCCFacturas</h1>
+    <h1>⚽ JCCFacturas</h1>
     <p id="header-user">Iniciá sesión para continuar</p>
   </div>
   <button id="btn-logout" onclick="logout()">Salir</button>
