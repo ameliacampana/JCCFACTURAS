@@ -489,27 +489,18 @@ function nombreArchivo(file) {
 }
 
 async function subirArchivo() {
-  // Renovar token
   const t = await msalInstance.acquireTokenSilent({ ...loginRequest, account: currentAccount });
   state.token = t.accessToken;
 
   const ruta   = rutaOneDrive();
   const nombre = nombreArchivo(state.archivo);
+  const pathCompleto = ruta + '/' + nombre;
 
-  // Buscar la carpeta JCCFACTURAS en los drives compartidos con el usuario
-  // (Amelia compartió JCCFACTURAS con itucam@hotmail.com)
-  const driveId = await obtenerDriveCompartido();
-  
-  // Subir el archivo al drive compartido
-  // Si tenemos el itemId raíz de la carpeta compartida, navegar desde ahí
-  let endpoint;
-  if (_rootItemId) {
-    endpoint = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${_rootItemId}:/${encodeURIComponent(ruta.replace(CARPETA_RAIZ+'/', ''))}/${encodeURIComponent(nombre)}:/content`;
-  } else {
-    endpoint = `https://graph.microsoft.com/v1.0/drives/${driveId}/root:/${encodeURIComponent(ruta)}/${encodeURIComponent(nombre)}:/content`;
-  }
+  // Subir directo con conflictBehavior=replace — Graph crea las carpetas automáticamente
+  const url = 'https://graph.microsoft.com/v1.0/me/drive/root:/' + 
+    pathCompleto.split('/').map(encodeURIComponent).join('/') + ':/content';
 
-  const resp = await fetch(endpoint, {
+  const resp = await fetch(url, {
     method: 'PUT',
     headers: {
       'Authorization': 'Bearer ' + state.token,
@@ -518,173 +509,9 @@ async function subirArchivo() {
     body: state.archivo
   });
 
-  // Si falla con 404, intentar en carpeta compartida
-  if (resp.status === 404 || resp.status === 400) {
-    console.log('No encontrado en drive propio, buscando en compartidos...');
-    const itemId = await obtenerItemCompartido();
-    const subRutaSinRaiz = ruta.replace(CARPETA_RAIZ + '/', '') + '/' + nombre;
-    endpoint = `https://graph.microsoft.com/v1.0/me/drive/items/${itemId}:/${encodeURIComponent(subRutaSinRaiz)}:/content`;
-    
-    const resp2 = await fetch(endpoint, {
-      method: 'PUT',
-      headers: {
-        'Authorization': 'Bearer ' + state.token,
-        'Content-Type': state.archivo.type || 'application/octet-stream'
-      },
-      body: state.archivo
-    });
-    if (!resp2.ok) {
-      const err = await resp2.text();
-      throw new Error(`Error ${resp2.status}: ${err}`);
-    }
-    return ruta;
-  }
-  
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Error ${resp.status}: ${err}`);
-  }
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(JSON.stringify(data.error || data));
   return ruta;
 }
 
-// Cache del driveId para no buscarlo en cada subida
-let _driveId = null;
 
-async function obtenerDriveCompartido() {
-  if (_driveId) return _driveId;
-  
-  // Buscar en los items compartidos conmigo la carpeta JCCFACTURAS
-  const resp = await fetch(
-    'https://graph.microsoft.com/v1.0/me/drive/sharedWithMe',
-    { headers: { 'Authorization': 'Bearer ' + state.token } }
-  );
-  
-  if (!resp.ok) throw new Error('No se pudo acceder a los archivos compartidos');
-  
-  const data = await resp.json();
-  const carpeta = data.value.find(item => 
-    item.name === 'JCCFACTURAS' && item.folder
-  );
-  
-  if (!carpeta) throw new Error('No se encontró la carpeta JCCFACTURAS compartida. Verificá que Amelia la compartió con esta cuenta.');
-  
-  // El driveId es el del remote item
-  _driveId = carpeta.remoteItem ? carpeta.remoteItem.parentReference.driveId : carpeta.parentReference.driveId;
-  
-  // Actualizar el item ID raíz para navegar desde ahí
-  _rootItemId = carpeta.remoteItem ? carpeta.remoteItem.id : carpeta.id;
-  
-  console.log('Drive compartido encontrado:', _driveId);
-  return _driveId;
-}
-
-let _rootItemId = null;
-
-// ══════════════════════════════════════════
-// GUARDAR
-// ══════════════════════════════════════════
-async function guardar() {
-  if (state.canal==='mail') {
-    toast('Reenviá el mail a facturas@campana.com 📧', 'ok', 4000);
-    setTimeout(resetForm, 4200);
-    return;
-  }
-  if (!state.archivo) { toast('Seleccioná un archivo primero','err'); return; }
-
-  const btn = document.getElementById('btn-guardar');
-  btn.disabled = true;
-  btn.innerHTML = '<span>⏳</span> Subiendo...';
-  setProgress(10);
-
-  try {
-    // Test 1: verificar token y acceso al drive
-    const t = await msalInstance.acquireTokenSilent({ ...loginRequest, account: currentAccount });
-    state.token = t.accessToken;
-    console.log('Token OK, usuario:', currentAccount.username);
-    
-    setProgress(20);
-    
-    // Test 2: verificar acceso al drive
-    const driveResp = await fetch('https://graph.microsoft.com/v1.0/me/drive', {
-      headers: { 'Authorization': 'Bearer ' + state.token }
-    });
-    const driveData = await driveResp.json();
-    console.log('Drive status:', driveResp.status, 'Drive:', JSON.stringify(driveData).substring(0,200));
-    
-    if (!driveResp.ok) {
-      throw new Error(`Sin acceso al drive: ${driveResp.status} — ${JSON.stringify(driveData)}`);
-    }
-    
-    setProgress(40);
-    const ruta = await subirArchivo();
-    setProgress(100);
-    toast(`✅ Guardado en ${ruta}`, 'ok', 4000);
-    setTimeout(resetForm, 4200);
-  } catch(e) {
-    console.error('Error completo:', e);
-    // Mostrar error completo en pantalla
-    const errDiv = document.getElementById('error-guardar') || document.getElementById('error-login');
-    if (errDiv) { 
-      errDiv.textContent = e.message; 
-      errDiv.style.display = 'block';
-      // Scroll al error
-      errDiv.scrollIntoView({behavior: 'smooth'});
-    }
-    toast('Error: ' + e.message.substring(0,80), 'err', 8000);
-    btn.disabled = false;
-    btn.innerHTML = '<span>☁️</span> Guardar en OneDrive';
-    setProgress(0);
-  }
-}
-
-// ══════════════════════════════════════════
-// HELPERS
-// ══════════════════════════════════════════
-function showPaso(n) {
-  document.getElementById('paso2').style.display = n>=2 ? 'block' : 'none';
-  document.getElementById('paso3').style.display = n>=3 ? 'block' : 'none';
-  [1,2,3].forEach(i => {
-    document.getElementById('dot'+i).className = 'step-dot' + (i<n?' done':i===n?' active':'');
-  });
-  [1,2].forEach(i => {
-    document.getElementById('line'+i).className = 'step-line' + (i<n?' done':'');
-  });
-  const labels = ['','Paso 1 — ¿Cómo llega el comprobante?','Paso 2 — Clasificá el gasto','Paso 3 — Confirmá y guardá'];
-  document.getElementById('step-label').textContent = labels[n] || '';
-  if (n>=3) actualizarRuta();
-}
-
-function resetForm() {
-  state = { ...state, canal:null, archivo:null, impuesto:null, categoria:null, mes:MESES[new Date().getMonth()] };
-  document.querySelectorAll('.opt-btn,.imp-btn,.cat-btn').forEach(b=>b.classList.remove('selected'));
-  document.getElementById('file-preview-box').innerHTML = '';
-  document.getElementById('mail-instruccion').style.display = 'none';
-  document.getElementById('bloque-cat').style.display = 'none';
-  document.getElementById('ruta-preview').style.display = 'none';
-  document.getElementById('resumen-op').innerHTML = '';
-  document.getElementById('btn-guardar').disabled = true;
-  document.getElementById('btn-guardar').innerHTML = '<span>☁️</span> Guardar en OneDrive';
-  ['input-foto','input-archivo','input-banco'].forEach(id=>document.getElementById(id).value='');
-  showPaso(1);
-  buildMeses();
-  setProgress(0);
-}
-
-function setProgress(pct) {
-  const bar = document.getElementById('progress-bar');
-  bar.style.display = pct>0 && pct<100 ? 'block' : 'none';
-  bar.style.width = pct + '%';
-}
-
-function toast(msg, tipo='', dur=3000) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = 'show ' + tipo;
-  clearTimeout(el._t);
-  el._t = setTimeout(() => { el.className = ''; }, dur);
-}
-
-init();
-</script>
-</body>
-</html>
