@@ -476,15 +476,27 @@ async function obtenerCarpetaCompartida() {
   const resp = await fetch('https://graph.microsoft.com/v1.0/me/drive/sharedWithMe', {
     headers: { 'Authorization': 'Bearer ' + state.token }
   });
-  if (!resp.ok) throw new Error('No se pudo acceder a archivos compartidos');
+  if (!resp.ok) throw new Error('Error accediendo compartidos: ' + resp.status);
   const data = await resp.json();
-  console.log('Compartidos:', data.value?.map(i => i.name + ' id:' + i.id));
+  
+  // Mostrar diagnóstico en pantalla
+  const nombres = data.value?.map(i => i.name) || [];
+  const errDiv = document.getElementById('error-guardar');
+  if (errDiv) {
+    errDiv.textContent = 'Compartidos encontrados: ' + JSON.stringify(nombres);
+    errDiv.style.display = 'block';
+  }
+  
   const carpeta = data.value?.find(i => i.name === 'JCCFACTURAS');
-  if (!carpeta) throw new Error('Carpeta JCCFACTURAS no encontrada en compartidos');
-  // remoteItem contiene el driveId del owner y el itemId de la carpeta
+  if (!carpeta) throw new Error('JCCFACTURAS no está en compartidos. Encontrados: ' + JSON.stringify(nombres));
+  
   const driveId = carpeta.remoteItem?.parentReference?.driveId;
   const itemId  = carpeta.remoteItem?.id || carpeta.id;
-  console.log('driveId:', driveId, 'itemId:', itemId);
+  
+  if (errDiv) {
+    errDiv.textContent = 'Carpeta OK — driveId: ' + driveId + ' itemId: ' + itemId;
+  }
+  
   _carpetaCache = { driveId, itemId };
   return _carpetaCache;
 }
